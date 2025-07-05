@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sierra Leone DAP Assessment Dashboard - </title>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<style>
+  body, html {
+    margin: 0;
+    height: 100%;
+    font-family: Arial, sans-serif;
+    overflow: hidden;
+  }
+  header {
+    background: #2c3e50;
+    color: white;
+    padding: 10px;
+    text-align: center;
+  }
+  #page1, #page2 {
+    height: calc(100vh - 60px);
+    padding: 10px;
+    box-sizing: border-box;
+  }
+  #page1 {
+    display: flex;
+    flex-direction: column;
+  }
+  #chartsContainer {
+    display: flex;
+    gap: 30px;
+    flex: 1 1 60%;
+  }
+  .chart-box {
+    flex: 1;
+  }
+  #locationTableContainer {
+    flex: 1 1 40%;
+    overflow-y: auto;
+    margin-top: 10px;
+    border-top: 1px solid #ccc;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 6px 8px;
+    text-align: left;
+  }
+  th {
+    background: #f2f2f2;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  tbody tr:hover {
+    background: #d0e7ff;
+    cursor: pointer;
+  }
+  #page2 {
+    display: none;
+    position: relative;
+  }
+  #map {
+    height: 100%;
+    width: 100%;
+  }
+  #backBtn {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1000;
+    background: white;
+    border: none;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: bold;
+    box-shadow: 0 0 5px rgba(0,0,0,0.3);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sierra Leone Locations Dashboard</h1>
+  <p>Click chart bars or locations to see details on the map.</p>
+</header>
+
+<!-- PAGE 1: Charts + Table -->
+<div id="page1">
+  <div id="chartsContainer">
+    <div class="chart-box">
+      <h3>Locations by Province</h3>
+      <canvas id="provinceChart"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Locations by District</h3>
+      <canvas id="districtChart"></canvas>
+    </div>
+  </div>
+  <div id="locationTableContainer">
+    <h2>Locations</h2>
+    <table id="locationsTable">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Latitude</th>
+          <th>Longitude</th>
+          <th>Plus Code</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Rows will be injected here -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PAGE 2: Map -->
+<div id="page2">
+  <button id="backBtn">← Back to Charts</button>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+// Location data with region and district
+const locations = [
+  { name: "General Post Office", lat: 8.4844, lon: -13.2344, region: "Western", district: "Western Area Urban" },
+  { name: "New England Post Office", lat: 8.4844, lon: -13.2344, region: "Western", district: "Western Area Urban" },
+  { name: "Cline Town Post Office", lat: 8.483, lon: -13.2, region: "Western", district: "Western Area Urban" },
+  { name: "Aberdeen Post Office", lat: 8.5, lon: -13.2833, region: "Western", district: "Western Area Urban" },
+  { name: "Central Library and Headquarters", lat: 8.4844, lon: -13.2344, region: "Western", district: "Western Area Urban" },
+  { name: "Kissy Branch Library", lat: 8.4844, lon: -13.2344, region: "Western", district: "Western Area Urban" },
+  { name: "University of Sierra Leone (USL)", lat: 8.4887, lon: -13.2057, region: "Western", district: "Western Area Urban" },
+  { name: "Fourah Bay College (FBC)", lat: 8.4772, lon: -13.2212, region: "Western", district: "Western Area Urban" },
+  { name: "College of Medicine and Allied Health Sciences (COMAHS)", lat: 8.4704, lon: -13.2402, region: "Western", district: "Western Area Urban" },
+  { name: "Institute of Public Administration and Management (IPAM)", lat: 8.4838, lon: -13.2346, region: "Western", district: "Western Area Urban" },
+  { name: "Milton Margai Technical University (MMTU)", lat: 8.3833, lon: -13.2167, region: "Western", district: "Western Area Rural" },
+  { name: "United Methodist University (UMU)", lat: 8.4844, lon: -13.2344, region: "Western", district: "Western Area Urban" },
+  { name: "Limkokwing University of Creative Technology", lat: 8.4844, lon: -13.2344, region: "Western", district: "Western Area Urban" },
+  { name: "Waterloo Post Office", lat: 8.3389, lon: -13.0709, region: "Western", district: "Western Area Rural" },
+  { name: "Western Rural District Library", lat: 8.3389, lon: -13.0709, region: "Western", district: "Western Area Rural" },
+  { name: "Waterloo Library", lat: 8.3389, lon: -13.0709, region: "Western", district: "Western Area Rural" },
+  { name: "WESTERNArea Rural District Council", lat: 8.3071, lon: -13.0734, region: "Western", district: "Western Area Rural" },
+  { name: "Bo Regional Library", lat: 7.9647, lon: -11.7383, region: "Southern", district: "Bo" },
+  { name: "Bo city Library", lat: 7.9647, lon: -11.7383, region: "Southern", district: "Bo" },
+  { name: "Bo Post Office", lat: 7.9647, lon: -11.7383, region: "Southern", district: "Bo" },
+  { name: "Bo District Council", lat: 7.9647, lon: -11.7383, region: "Southern", district: "Bo" },
+  { name: "Njala University (Bo Campus)", lat: 7.9647, lon: -11.7383, region: "Southern", district: "Bo" },
+  { name: "Bonthe City Library", lat: 7.5264, lon: -12.505, region: "Southern", district: "Bonthe" },
+  { name: "Mattru Jong Post Office", lat: 7.5997, lon: -12.1667, region: "Southern", district: "Bonthe" },
+  { name: "Moyamba District Library", lat: 7.6261, lon: -12.4333, region: "Southern", district: "Moyamba" },
+  { name: "Moyamba Post Office", lat: 7.6261, lon: -12.4333, region: "Southern", district: "Moyamba" },
+  { name: "Pujehun District Library", lat: 7.3589, lon: -11.72, region: "Southern", district: "Pujehun" },
+  { name: "Pujehun Post Office", lat: 7.3589, lon: -11.72, region: "Southern", district: "Pujehun" },
+  { name: "Koidu New Sembehun City Library", lat: 8.6439, lon: -10.9711, region: "Eastern", district: "Kono" },
+  { name: "Kono, Koidu Post Office", lat: 8.6439, lon: -10.9711, region: "Eastern", district: "Kono" },
+  { name: "Segbwema Branch Library", lat: 7.9926, lon: -10.9484, region: "Eastern", district: "Kenema" },
+  { name: "Kailahun Post Office", lat: 8.28, lon: -10.57, region: "Eastern", district: "Kailahun" },
+  { name: "Pendembu Post Office", lat: 8.05, lon: -10.7, region: "Eastern", district: "Kailahun" },
+  { name: "Daru Post Office", lat: 7.99, lon: -10.85, region: "Eastern", district: "Kenema" },
+  { name: "Hangha Post Office", lat: 7.8833, lon: -11.1833, region: "Eastern", district: "Kenema" },
+  { name: "Segbwema Post Office", lat: 7.9926, lon: -10.9484, region: "Eastern", district: "Kenema" },
+  { name: "Kailahun District Library", lat: 8.28, lon: -10.57, region: "Eastern", district: "Kailahun" },
+  { name: "Kailahun District Council", lat: 8.28, lon: -10.57, region: "Eastern", district: "Kailahun" },
+  { name: "Kenema Post Office", lat: 8.7, lon: -11.95, region: "Eastern", district: "Kenema" },
+  { name: "Kenema Regional Library", lat: 8.7167, lon: -11.95, region: "Eastern", district: "Kenema" },
+  { name: "Kenema City Library", lat: 8.5333, lon: -12, region: "Eastern", district: "Kenema" },
+  { name: "Tonkolili District Library", lat: 8.8833, lon: -12.05, region: "Northern", district: "Tonkolili" },
+  { name: "Magburaka Post Office", lat: 8.8833, lon: -12.05, region: "Northern", district: "Tonkolili" },
+  { name: "Mile 91 Library", lat: 8.8833, lon: -12.05, region: "Northern", district: "Tonkolili" },
+  { name: "Makeni Regional Library", lat: 8.8833, lon: -12.05, region: "Northern", district: "Bombali" },
+  { name: "Makeni City Library", lat: 8.8833, lon: -12.05, region: "Northern", district: "Bombali" },
+  { name: "Makeni Post Office", lat: 8.7667, lon: -12.7833, region: "Northern", district: "Bombali" },
+  { name: "Bombali District Council", lat: 8.75, lon: -12.5333, region: "Northern", district: "Bombali" },
+  { name: "Ernest Bai Koroma University of Science and Technology (EBKUST)", lat: 8.75, lon: -12.5333, region: "Northern", district: "Bombali" },
+  { name: "University of Makeni (UNIMAK)", lat: 9.1333, lon: -12.9167, region: "Northern", district: "Bombali" },
+  { name: "Port Loko District Library", lat: 9.1333, lon: -12.9167, region: "Northern", district: "Port Loko" },
+  { name: "Lunsar Post Office", lat: 9.5833, lon: -11.5, region: "Northern", district: "Port Loko" },
+  { name: "University of Lunsar (UoL)", lat: 9.5833, lon: -11.5, region: "Northern", district: "Port Loko" },
+  { name: "Kambia District Library", lat: 9.8833, lon: -11.2833, region: "Northern", district: "Kambia" },
+  { name: "Kambia Post Office", lat: 8.8833, lon: -12.5, region: "Northern", district: "Kambia" },
+  { name: "Kambia District Council", lat: 7.8761, lon: -11.19, region: "Northern", district: "Kambia" },
+  { name: "Koinadugu District Library", lat: 7.4761, lon: -12.5047, region: "Northern", district: "Koinadugu" },
+  { name: "Kabala Post Office", lat: 8.4844, lon: -13.2344, region: "Northern", district: "Koinadugu" }
+];
+
+// Open Location Code (Plus Code) minimal encoder (same as before)
+const ALPHABET = '23456789CFGHJMPQRVWX';
+const ENCODING_BASE = ALPHABET.length;
+const PAIR_CODE_LENGTH = 10;
+const SEPARATOR = '+';
+const SEPARATOR_POSITION = 8;
+const MIN_LATITUDE = -90;
+const MAX_LATITUDE = 90;
+const MIN_LONGITUDE = -180;
+const MAX_LONGITUDE = 180;
+
+function encode(latitude, longitude, codeLength = PAIR_CODE_LENGTH) {
+  if (codeLength < 2 || (codeLength < SEPARATOR_POSITION && codeLength % 2 === 1)) {
+    throw new Error('Invalid Open Location Code length');
+  }
+
+  latitude = Math.min(Math.max(latitude, MIN_LATITUDE), MAX_LATITUDE);
+  longitude = normalizeLongitude(longitude);
+
+  latitude += 90;
+  longitude += 180;
+
+  let code = '';
+
+  let latPlaceValue = 40000000;
+  let lngPlaceValue = 40000000;
+
+  for (let i = 0; i < Math.floor(codeLength / 2); i++) {
+    let latDigit = Math.floor(latitude / latPlaceValue);
+    let lngDigit = Math.floor(longitude / lngPlaceValue);
+
+    code += ALPHABET.charAt(latDigit);
+    code += ALPHABET.charAt(lngDigit);
+
+    latitude -= latDigit * latPlaceValue;
+    longitude -= lngDigit * lngPlaceValue;
+
+    latPlaceValue /= ENCODING_BASE;
+    lngPlaceValue /= ENCODING_BASE;
+  }
+
+  if (code.length > SEPARATOR_POSITION) {
+    code = code.slice(0, SEPARATOR_POSITION) + SEPARATOR + code.slice(SEPARATOR_POSITION);
+  } else {
+    code = code + SEPARATOR;
+  }
+
+  return code;
+}
+
+function normalizeLongitude(lng) {
+  while (lng < MIN_LONGITUDE) {
+    lng += 360;
+  }
+  while (lng >= MAX_LONGITUDE) {
+    lng -= 360;
+  }
+  return lng;
+}
+
+// Generate Plus Codes
+locations.forEach(loc => {
+  loc.plusCode = encode(loc.lat, loc.lon);
+});
+
+// Chart data preparation
+const provinceCounts = {};
+const districtCounts = {};
+
+locations.forEach(loc => {
+  provinceCounts[loc.region] = (provinceCounts[loc.region] || 0) + 1;
+  districtCounts[loc.district] = (districtCounts[loc.district] || 0) + 1;
+});
+
+// Charts setup
+const colors = [
+    '#4dc9f6', '#f67019', '#f53794', '#537bc4',
+    '#acc236', '#166a8f', '#00a950', '#58595b',
+    '#8549ba', '#e6194b', '#3cb44b', '#ffe119',
+    '#4363d8', '#f58231', '#911eb4', '#46f0f0',
+    '#f032e6', '#bcf60c', '#fabebe', '#008080'
+  ];
+
+  // Province chart
+  const provinceLabels = Object.keys(provinceCounts);
+  const provinceData = Object.values(provinceCounts);
+
+  const provinceCtx = document.getElementById('provinceChart').getContext('2d');
+  const provinceChart = new Chart(provinceCtx, {
+    type: 'bar',
+    data: {
+      labels: provinceLabels,
+      datasets: [{
+        label: 'Locations by Province',
+        data: provinceData,
+        backgroundColor: provinceLabels.map((_, i) => colors[i % colors.length])
+      }]
+    },
+    options: {
+      responsive: true,
+      onClick(evt, elements) {
+        if (!elements.length) return;
+        const idx = elements[0].index;
+        const province = this.data.labels[idx];
+        filterTableByProvince(province);
+      },
+      scales: {
+        y: { beginAtZero: true, precision: 0 }
+      }
+    }
+  });
+
+  // District chart
+  const districtLabels = Object.keys(districtCounts);
+  const districtData = Object.values(districtCounts);
+
+  const districtCtx = document.getElementById('districtChart').getContext('2d');
+  const districtChart = new Chart(districtCtx, {
+    type: 'bar',
+    data: {
+      labels: districtLabels,
+      datasets: [{
+        label: 'Locations by District',
+        data: districtData,
+        backgroundColor: districtLabels.map((_, i) => colors[i % colors.length])
+      }]
+    },
+    options: {
+      responsive: true,
+      onClick(evt, elements) {
+        if (!elements.length) return;
+        const idx = elements[0].index;
+        const district = this.data.labels[idx];
+        filterTableByDistrict(district);
+      },
+      scales: {
+        y: { beginAtZero: true, precision: 0 }
+      }
+    }
+  });
+
+// Table rendering with Lat, Lon, Plus Code
+const tbody = document.querySelector('#locationsTable tbody');
+
+function renderTable(filterFunc = null) {
+  tbody.innerHTML = '';
+  const filtered = filterFunc ? locations.filter(filterFunc) : locations;
+  filtered.forEach((loc) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${loc.name}</td>
+      <td>${loc.lat.toFixed(4)}</td>
+      <td>${loc.lon.toFixed(4)}</td>
+      <td>${loc.plusCode}</td>
+    `;
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', () => {
+      openMapForLocation(loc);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function filterTableByProvince(province) {
+  renderTable(loc => loc.region === province);
+}
+
+function filterTableByDistrict(district) {
+  renderTable(loc => loc.district === district);
+}
+
+// Clicking header resets filter
+document.querySelector('header').addEventListener('click', () => {
+  renderTable();
+});
+
+// Initial render
+renderTable();
+
+// Leaflet Map Setup
+let map;
+let markers = [];
+
+const page1 = document.getElementById('page1');
+const page2 = document.getElementById('page2');
+const backBtn = document.getElementById('backBtn');
+
+function openMapForLocation(location) {
+  page1.style.display = 'none';
+  page2.style.display = 'block';
+
+  if (!map) {
+    map = L.map('map').setView([location.lat, location.lon], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    locations.forEach(loc => {
+      const marker = L.marker([loc.lat, loc.lon]).addTo(map);
+      let popupContent = `<strong>${loc.name}</strong><br>
+                          District: ${loc.district}<br>
+                          Province: ${loc.region}<br>
+                          Plus Code: ${loc.plusCode}<br>`;
+      if (loc.district === 'Bo') {
+        popupContent += '<em>Special attention: Bo district location.</em>';
+      }
+      marker.bindPopup(popupContent);
+      markers.push(marker);
+    });
+  }
+
+  map.setView([location.lat, location.lon], 14);
+
+  const selectedMarker = markers.find(m => {
+    const latLng = m.getLatLng();
+    return latLng.lat === location.lat && latLng.lng === location.lon;
+  });
+  if (selectedMarker) {
+    selectedMarker.openPopup();
+  }
+}
+
+backBtn.addEventListener('click', () => {
+  page2.style.display = 'none';
+  page1.style.display = 'flex';
+  markers.forEach(m => m.closePopup());
+});
+</script>
+</body>
+</html>
